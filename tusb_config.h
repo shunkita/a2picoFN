@@ -2,6 +2,7 @@
  * The MIT License (MIT)
  *
  * Copyright (c) 2019 Ha Thach (tinyusb.org)
+ * Copyright (c) 2026 a2picoFN
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,24 +27,13 @@
 #ifndef _TUSB_CONFIG_H_
 #define _TUSB_CONFIG_H_
 
-#if HOST
-#define CFG_TUSB_RHPORT0_MODE   (OPT_MODE_HOST   | OPT_MODE_FULL_SPEED)
-#else
 #define CFG_TUSB_RHPORT0_MODE   (OPT_MODE_DEVICE | OPT_MODE_FULL_SPEED)
-#endif
 
 #define BOARD_TUD_MAX_SPEED     OPT_MODE_DEFAULT_SPEED
-#define BOARD_TUH_MAX_SPEED     OPT_MODE_DEFAULT_SPEED
-
 #define CFG_TUD_MAX_SPEED       BOARD_TUD_MAX_SPEED
-#define CFG_TUH_MAX_SPEED       BOARD_TUH_MAX_SPEED
 
-#define CFG_TUD_MSC             1
 #define CFG_TUD_CDC             1
-
-#define CFG_TUH_MSC             1
-
-#define CFG_TUD_MSC_EP_BUFSIZE  8192
+#define CFG_TUD_MSC             0
 
 #define CFG_TUD_CDC_EP_BUFSIZE  64
 #define CFG_TUD_CDC_RX_BUFSIZE  64

@@ -39,7 +39,6 @@ SOFTWARE.
 
 #include "board.h"
 #include "sp.h"
-#include "test.h"
 
 #include "main.h"
 
@@ -90,6 +89,5 @@ void main(void) {
 #if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
         cyw43_arch_poll();
 #endif
-        test_core0_task();
     }
 }

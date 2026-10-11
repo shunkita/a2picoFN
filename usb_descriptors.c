@@ -81,7 +81,6 @@ enum
 {
     ITF_NUM_CDC = 0,
     ITF_NUM_CDC_DATA,
-    ITF_NUM_MSC,
     ITF_NUM_TOTAL
 };
 
@@ -89,11 +88,7 @@ enum
 #define EPNUM_CDC_OUT   0x02
 #define EPNUM_CDC_IN    0x82
 
-#define EPNUM_MSC_OUT   0x03
-#define EPNUM_MSC_IN    0x83
-
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + CFG_TUD_CDC * TUD_CDC_DESC_LEN \
-                                               + CFG_TUD_MSC * TUD_MSC_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + CFG_TUD_CDC * TUD_CDC_DESC_LEN)
 
 // Full speed configuration
 uint8_t const desc_fs_configuration[] =
@@ -103,9 +98,6 @@ uint8_t const desc_fs_configuration[] =
 
     // Interface number, string index, EP notification address and size, EP data address (out, in) and size.
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
-
-    // Interface number, string index, EP Out & EP In address, EP size
-    TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, 5, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -128,11 +120,10 @@ static char serial[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
 char const* string_desc_arr [] =
 {
     (const char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
-    "A2retro",                  // 1: Manufacturer
-    "A2retroNET",               // 2: Product
+    "a2picoFN",                 // 1: Manufacturer
+    "a2picoFN SmartPort Bridge",// 2: Product
     serial,                     // 3: Serials, uses flash ID
-    "A2retroNET CDC",           // 4: CDC Interface
-    "A2retroNET MSC",           // 5: MSC Interface
+    "a2picoFN CDC",             // 4: CDC Interface
 };
 
 static uint16_t _desc_str[32];

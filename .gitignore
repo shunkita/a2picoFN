@@ -5,5 +5,6 @@
 build*/
 cmake-build*/
 
-# Local reference archives
-refs/*.zip
+# Local docs and references
+docs/
+refs/
