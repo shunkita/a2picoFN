@@ -36,8 +36,6 @@ cmake --build .
 * `a2pico2litew`: A2Pico2Lite W (tested)
 * `a2pico2-generic`: A2Pico2Lite non-W (untested)
 
-For detailed prerequisite setup and flashing steps, see [getting-started.md](getting-started.md).
-
 ---
 
 ## License
