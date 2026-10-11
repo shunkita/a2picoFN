@@ -1,0 +1,95 @@
+/*
+
+MIT License
+
+Copyright (c) 2024 Oliver Schmidt (https://a2retro.de/)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
+
+#include <stdio.h>
+#include <pico/stdlib.h>
+#include <pico/multicore.h>
+#include <hardware/clocks.h>
+#include <hardware/structs/busctrl.h>
+#if HOST
+#include <tusb.h>
+#else
+#include "transport.h"
+#endif
+
+#include <a2pico.h>
+
+#include "board.h"
+#include "sp.h"
+#include "test.h"
+
+#include "main.h"
+
+void io_task(void) {
+#if HOST
+        tuh_task();
+#else
+        transport_task();
+        // ser_task() is omitted: transport is dedicated to SLIP SmartPort bridge
+#endif
+}
+
+#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
+#include <pico/cyw43_arch.h>
+#endif
+
+void main(void) {
+    set_sys_clock_khz(200000, false);
+
+    busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
+    multicore_launch_core1(board);
+
+    stdio_uart_init_full(uart0, PICO_DEFAULT_UART_BAUD_RATE, a2pico_tx(), a2pico_rx());
+    printf("*** a2picoFN ***\n");
+
+#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
+    int cyw_rc = cyw43_arch_init();
+    printf("[CYW43] cyw43_arch_init returned %d\n", cyw_rc);
+    if (cyw_rc == 0) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        cyw43_arch_poll();
+        printf("[CYW43] Boot-time on-board LED turned ON\n");
+    } else {
+        printf("[CYW43] ERROR: cyw43_arch_init failed!\n");
+    }
+#endif
+
+    sp_init();
+#if HOST
+    tusb_init();
+#else
+    transport_init();
+#endif
+
+    while (true) {
+        sp_task();
+        io_task();
+#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
+        cyw43_arch_poll();
+#endif
+        test_core0_task();
+    }
+}

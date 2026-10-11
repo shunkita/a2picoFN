@@ -1,0 +1,9 @@
+# macOS metadata
+.DS_Store
+
+# CMake build directories
+build*/
+cmake-build*/
+
+# Local reference archives
+refs/*.zip
