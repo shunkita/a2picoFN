@@ -25,6 +25,7 @@ void transport_task(void);
  * - CDC: DTR/RTS connected.
  * - TCP: FujiNet-PC client has connected to port 1985.
  */
+extern volatile bool transport_connected;
 bool transport_is_connected(void);
 
 /*

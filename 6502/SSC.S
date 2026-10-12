@@ -176,6 +176,7 @@ SIZEH   EQU $47
 ;;;;;;;;;;;;;;;;;;;;;;;
 DATA    EQU $CFF0       ; SMARTPORT DATA REGISTER
 CTRL    EQU $CFF1       ; SMARTPORT CONTROL REGISTER
+FNSTAT  EQU $CFF2       ; SMARTPORT / FUJINET STATUS REGISTER ($80 = READY)
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ; BASIC MODE ADDRESSES ;
 ;;;;;;;;;;;;;;;;;;;;;;;;

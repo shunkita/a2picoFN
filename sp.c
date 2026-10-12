@@ -39,6 +39,7 @@ SOFTWARE.
 #endif
 #include "gen.h"
 #include "slip.h"
+#include "transport.h"
 
 #include "sp.h"
 
@@ -207,9 +208,8 @@ void sp_task(void) {
     return;
 
   case CONTROL_CONFIG:
-    // Configuration utility bypassed in bridge mode; signal 6502 BOOT1 to
-    // proceed to DOBOOT
-    sp_buffer[0] = 1; // DELAY_DONE
+    // Signal 6502 whether FujiNet is ready (1) or still connecting (0)
+    sp_buffer[0] = transport_is_connected() ? 1 : 0;
     break;
 
   case CONTROL_PRODOS:

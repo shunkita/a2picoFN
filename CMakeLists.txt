@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
 set(PROJECT_NAME a2picoFN)
-set(VERSION "2026-10-11" CACHE STRING "Firmware release date/version")
+set(VERSION "2026-10-12" CACHE STRING "Firmware release date/version")
 
 # Validate supported PICO_BOARD and set board suffix
 if(PICO_BOARD STREQUAL "a2pico2litew")
@@ -61,8 +61,7 @@ target_sources(${TARGET_NAME} PRIVATE
         main.c
         slip.c
         sp.c
-        transport_cdc.c
-        usb_descriptors.c
+        transport_wifi.c
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
@@ -70,16 +69,31 @@ target_link_libraries(${TARGET_NAME} PRIVATE
         pico_multicore
         pico_stdlib
         pico_unique_id
-        tinyusb_device
         )
 
+pico_enable_stdio_usb(${TARGET_NAME} 0)
+pico_enable_stdio_uart(${TARGET_NAME} 0)
+
 if(PICO_BOARD STREQUAL "a2pico2litew")
-    target_link_libraries(${TARGET_NAME} PRIVATE pico_cyw43_arch_poll)
+    target_link_libraries(${TARGET_NAME} PRIVATE pico_cyw43_arch_lwip_poll)
     target_compile_definitions(${TARGET_NAME} PRIVATE
         PICO_CYW43_SUPPORTED=1
-        CYW43_LWIP=0
+        CYW43_LWIP=1
         CYW43_USE_SPI=1
         USE_SDIOIT=0
         CYW43_WL_GPIO_LED_PIN=0
     )
+endif()
+
+if(DEFINED WIFI_SSID)
+    target_compile_definitions(${TARGET_NAME} PRIVATE WIFI_SSID="${WIFI_SSID}")
+endif()
+if(DEFINED WIFI_PASSWORD)
+    target_compile_definitions(${TARGET_NAME} PRIVATE WIFI_PASSWORD="${WIFI_PASSWORD}")
+endif()
+if(DEFINED FUJINET_PC_IP)
+    target_compile_definitions(${TARGET_NAME} PRIVATE FUJINET_PC_IP="${FUJINET_PC_IP}")
+endif()
+if(DEFINED FUJINET_PC_PORT)
+    target_compile_definitions(${TARGET_NAME} PRIVATE FUJINET_PC_PORT=${FUJINET_PC_PORT})
 endif()

@@ -31,6 +31,7 @@ SOFTWARE.
 
 #include "firmware.h"
 #include "sp.h"
+#include "transport.h"
 
 #include "board.h"
 
@@ -175,15 +176,20 @@ static void __time_critical_func(sp_control_get)(void) {
     a2pico_putdata(sp_control);
 }
 
+static void __time_critical_func(sp_status_get)(void) {
+    active = true;  // Ensure slot ROM remains active during wait polling
+    a2pico_putdata(transport_connected ? 0x80 : 0x00);
+}
+
 static void __time_critical_func(deactivate_get)(void) {
     active = false;
 }
 
 static const void __not_in_flash("cffx_get") (*cffx_get[])(void) = {
-    sp_data_get, sp_control_get, nop_get, nop_get,
-    nop_get,     nop_get,        nop_get, nop_get,
-    nop_get,     nop_get,        nop_get, nop_get,
-    nop_get,     nop_get,        nop_get, deactivate_get
+    sp_data_get, sp_control_get, sp_status_get, nop_get,
+    nop_get,     nop_get,        nop_get,       nop_get,
+    nop_get,     nop_get,        nop_get,       nop_get,
+    nop_get,     nop_get,        nop_get,       deactivate_get
 };
 
 static void __time_critical_func(sp_data_put)(uint32_t data) {

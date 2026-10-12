@@ -351,41 +351,89 @@ WRPAGE  LDA (ADDRL),Y
 ;;;;;;;;;;;;;;;;
 ; BOOT HANDLER ;
 ;;;;;;;;;;;;;;;;
-BOOT1   LDX #$00
-        LDY $07F7
-RETRY   LDA KBD
-        BMI HAVEKEY
-        STX DATA        ; STATE
-        LDA #$40        ; CONFIG
-        JSR WRCMD
-        BNE DOBOOT
-        LDX DATA        ; STATE
-        LDA DATA
-        STA $07F7
-        BNE RETRY       ; ALWAYS
-HAVEKEY STA KBDSTRB
-        STY $07F7
-        CLV             ; NO ERROR TEXT
-        CMP #'C'+$80
-        BEQ DOCFG
-        CMP #'c'+$80
-        BEQ DOCFG
-        CMP #'N'+$80
-        BEQ DONE
-        CMP #'n'+$80
-        BEQ DONE
-        CMP #'1'+$80
-        BCC DOBOOT
-        CMP #'9'+$80
-        BCS DOBOOT
-        LDY #$F0        ; SET BOOT
-        STY DATA
-        STA DATA
-        LDA #$40        ; CONFIG
-        JSR WRCMD
-        BEQ DOBOOT
-        BNE RETRY       ; ALWAYS
+BOOT1   LDA FNSTAT
+        BMI FN_READY    ; Already connected -> proceed to boot immediately
 
+        ; Soft switches to set text display
+        STA $C010       ; Clear keyboard strobe latch
+        STA $C051       ; TEXT mode ON
+        STA $C054       ; PAGE 1 ON
+
+        ; Clear top screen line ($0400-$0427, 40 columns) with spaces ($A0)
+        LDA #' '+$80
+        LDX #39
+CLR1    STA $0400,X
+        DEX
+        BPL CLR1
+
+        ; Write minimal status text directly to top screen line ($0400)
+        LDX #17
+PRMSG   LDA MSG_WAIT,X
+        STA $0400,X
+        DEX
+        BPL PRMSG
+
+        ; 500 iterations * ~120ms = ~60 seconds timeout
+        ; Input buffer RAM space ($0200, $0201)
+        LDA #<500
+        STA $0200       ; Timeout counter LO
+        LDA #>500
+        STA $0201       ; Timeout counter HI
+
+W_LOOP:
+        ; 1. Check FujiNet connection status ($CFF2)
+        LDA FNSTAT
+        BMI FN_READY    ; Connected! Proceed directly to boot
+
+        ; 2. Check keyboard for manual abort ($C000)
+        LDA KBD
+        BPL W_DELAY     ; Bit 7 = 0 -> no key pressed
+        STA KBDSTRB     ; Clear strobe
+        CMP #'C'+$80
+        BEQ GO_CFG
+        CMP #'c'+$80
+        BEQ GO_CFG
+        JMP DONE        ; Any other key aborts to next slot scan / BASIC
+GO_CFG: JMP DOCFG
+
+W_DELAY:
+        ; 3. Delay ~120ms using only X and Y registers
+        LDX #95
+DLY1    LDY #$00
+DLY2    DEY
+        BNE DLY2
+        DEX
+        BNE DLY1
+
+        ; 4. Update spinner at $0413 (after "CONNECTING FUJINET ")
+        LDA $0200
+        AND #$03
+        TAX
+        LDA SPINTBL,X
+        STA $0413
+
+        ; 5. Decrement 16-bit timeout counter
+        LDA $0200
+        BNE DCR_LO
+        DEC $0201
+DCR_LO: DEC $0200
+        LDA $0200
+        ORA $0201
+        BNE W_LOOP
+
+        ; Timeout reached -> abort to next slot scan
+        JMP DONE
+
+FN_READY:
+        JMP DOBOOT
+
+MSG_WAIT:
+        .BYTE 'C'|$80, 'O'|$80, 'N'|$80, 'N'|$80, 'E'|$80, 'C'|$80, 'T'|$80, 'I'|$80
+        .BYTE 'N'|$80, 'G'|$80, ' '|$80, 'F'|$80, 'U'|$80, 'J'|$80, 'I'|$80, 'N'|$80
+        .BYTE 'E'|$80, 'T'|$80
+
+SPINTBL:
+        .BYTE '/'|$80, '-'|$80, '\'|$80, '|'|$80
 DOCFG   JSR CFGHDLR
 
 DOBOOT  LDX #$01

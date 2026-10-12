@@ -61,21 +61,6 @@ void main(void) {
     busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
     multicore_launch_core1(board);
 
-    stdio_uart_init_full(uart0, PICO_DEFAULT_UART_BAUD_RATE, a2pico_tx(), a2pico_rx());
-    printf("*** a2picoFN ***\n");
-
-#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
-    int cyw_rc = cyw43_arch_init();
-    printf("[CYW43] cyw43_arch_init returned %d\n", cyw_rc);
-    if (cyw_rc == 0) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        cyw43_arch_poll();
-        printf("[CYW43] Boot-time on-board LED turned ON\n");
-    } else {
-        printf("[CYW43] ERROR: cyw43_arch_init failed!\n");
-    }
-#endif
-
     sp_init();
 #if HOST
     tusb_init();
@@ -86,8 +71,5 @@ void main(void) {
     while (true) {
         sp_task();
         io_task();
-#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
-        cyw43_arch_poll();
-#endif
     }
 }

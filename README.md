@@ -1,24 +1,50 @@
-# a2picoFN: Apple II SmartPort Bridge for FujiNet
+# a2picoFN: Apple II SmartPort Wi-Fi Bridge for FujiNet
 
 [![Status: Work in Progress](https://img.shields.io/badge/Status-Work_in_Progress-yellow.svg)](#overview)
 [![License](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
-> [!NOTE]
-> **Work in Progress:** This project currently depends on unmerged upstream fixes in [fujinet-firmware](https://github.com/FujiNetWIFI/fujinet-firmware) (FujiNet-PC). Running `a2picoFN` out-of-the-box with stock upstream releases is not yet supported.
+> [!WARNING]
+> **Active Development / Work in Progress**
+> This project is currently under active development. Architecture, configuration methods, and firmware features are subject to rapid iteration and changes.
 
-**a2picoFN** is an Apple II expansion card firmware that integrates FujiNet functionality using Raspberry Pi Pico 2 microcontrollers (RP2350). It emulates a SmartPort interface card on the Apple II bus and bridges storage and network requests to **FujiNet-PC** via a high-speed USB CDC link using the SLIP protocol.
+**a2picoFN** is an Apple II expansion card firmware that integrates FujiNet functionality using Raspberry Pi Pico 2 W microcontrollers (RP2350). It emulates a SmartPort interface card on the Apple II bus and bridges storage and network requests to **FujiNet-PC** over a transparent Wi-Fi TCP streaming connection using the standard SLIP protocol.
 
 ---
 
 ## Overview
 
-`a2picoFN` bridges the classic Apple II bus to the modern FujiNet ecosystem:
+`a2picoFN` bridges the classic Apple II bus to the modern FujiNet ecosystem wirelessly:
 
 * **Dual-Core Task Separation:**
-  * **Core 1 (Apple II Bus Frontend):** Responds in real-time to Apple II slot access (`$Cn00`, `$CFFF`, SmartPort registers) with minimal latency, building on low-level bus interfacing techniques from A2retroNET / a2pico.
-  * **Core 0 (Host Transport & Protocol Bridge):** Manages packet serialization and framing over USB CDC (SLIP protocol) directly to a host PC running FujiNet-PC.
+  * **Core 1 (Apple II Bus Frontend):** Responds in real-time to Apple II slot access (`$Cn00`, `$C800-$CFFF`, SmartPort registers) with sub-microsecond latency, building on low-level PIO bus interfacing from a2pico.
+  * **Core 0 (Wi-Fi Transport & Protocol Bridge):** Drives the CYW43 Wi-Fi stack (lwIP raw polling), runs an on-chip TCP server (port 1985), and handles transparent SLIP framing directly with FujiNet-PC.
 * **Target Hardware:**
-  * Supports **RP2350 (Raspberry Pi Pico 2)** microcontrollers (tested on **A2Pico2Lite W**).
+  * **Raspberry Pi Pico 2 W** (RP2350A + CYW43439), tested on **A2Pico2Lite W**.
+
+---
+
+## Tested Environment
+
+Hardware verification and testing have been performed using specific, fixed versions of FujiNet components (pinned versions rather than rolling latest builds):
+
+* **FujiNet Firmware (`fujinet-pc`):** `v1.5.1+git-3d8`
+* **CONFIG Program:** `031e086*`
+
+---
+
+## Configuration
+
+> [!NOTE]
+> **Provisional Configuration During Development**
+> Hardcoding Wi-Fi credentials and connection parameters in header files is a provisional configuration method during development. A persistent/interactive configuration mechanism will be introduced in future updates.
+
+Wi-Fi network credentials and FujiNet-PC settings are configured in `wifi_config.h`:
+
+```c
+#define WIFI_SSID       "your-ssid"
+#define WIFI_PASSWORD   "your-password"
+#define FUJINET_PC_PORT 1985
+```
 
 ---
 
@@ -32,12 +58,9 @@ cmake -DPICO_BOARD=a2pico2litew ..
 cmake --build .
 ```
 
-*Supported `PICO_BOARD` targets:*
-* `a2pico2litew`: A2Pico2Lite W (tested)
-* `a2pico2-generic`: A2Pico2Lite non-W (untested)
-
 ---
 
 ## License
 
 This project is licensed under the [GNU General Public License v2.0](LICENSE).
+
