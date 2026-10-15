@@ -246,144 +246,117 @@ SAVE    LDA ADDRL,Y
 SPCMD   DFB <STATUS-1, <READBL-1, <WRITEBL-1, <FORMAT-1, <CONTROL-1
         DFB <INIT  -1, <OPEN  -1, <CLOSE  -1, <READ  -1, <WRITE  -1
 
-;;;;;;;;;
-; UTILS ;
-;;;;;;;;;
-SETSIZE ; SET 16-BIT BUFFER SIZE
-        LDA (ADDRL),Y
-        STA SIZEL
-        INY
-        LDA (ADDRL),Y
-        STA SIZEH
+.INCLUDE "CONNECT.S"
+
+
+; =============================================================
+; MONITOR ROUTINE WRAPPERS & SCRATCHPAD ROUTINES
+; =============================================================
+
+; -------------------------------------------------------------
+; MON_INIT: Normalize text screen environment
+; -------------------------------------------------------------
+MON_INIT:
+        BIT $C082       ; Ensure motherboard ROM read is active
+        STA $C051       ; TEXT mode ON
+        STA $C054       ; PAGE 1 ON
+        STA $C00C       ; 40 columns ON (80 columns OFF)
+        JSR SETTXT      ; $FB39: normalize text window ($20-$23 to 0,40,0,24)
+        JSR SETSCR      ; $FE93: normalize CSW to COUT1
+        JSR SETKBD      ; $FE89: normalize KSW to KEYIN
+        JSR HOME        ; $FC58: clear screen and home cursor
         RTS
 
-SETADDR ; SET BUFFER ADDRESS
-        LDA (ADDRL),Y
-        TAX
-        INY
-        LDA (ADDRL),Y
-        STA ADDRH
-        STX ADDRL
-        RTS
-
-GETSTS  ; EXECUTE SMARTPORT COMMAND AND GET STATUS
-        LDA #$02        ; SMARTPORT
-        JSR WRCMD
-
-        ; SAVE STATUS IN STACK SLOT
-        TSX
-        TAY
+; -------------------------------------------------------------
+; MON_COUT: Register-safe direct screen output via COUT1
+; Input: A = Character (ASCII | $80)
+; Preserves: A, X, Y
+; -------------------------------------------------------------
+MON_COUT:
+        PHA
         TXA
-        CLC
-        ADC #$07        ; OFFSET OF STACK SLOT
-        TAX
+        PHA
         TYA
-        STA $0100,X
+        PHA
+        BIT $C082       ; Ensure motherboard ROM read is active
+        TSX
+        LDA $0103,X     ; Retrieve original character from stack
+        JSR COUT1       ; $FDF0: Direct screen output (bypass CSW)
+        PLA
+        TAY
+        PLA
+        TAX
+        PLA
         RTS
 
-RETCODE ; EXECUTE PRODOS COMMAND AND GET RETURN CODE
-        LDA #$01        ; PRODOS
-        ; FALL THROUGH
-
-WRCMD   ; WRITE COMMAND REG AND READ RESPONSE
-        STA CTRL
-WAIT    LDA CTRL
-        BPL WAIT
-        LDA DATA
+; -------------------------------------------------------------
+; MON_VTAB: Move cursor to beginning of row (CV = A, CH = 0)
+; Input: A = Row index (0..23)
+; Preserves: X, Y
+; -------------------------------------------------------------
+MON_VTAB:
+        PHA
+        BIT $C082       ; Ensure motherboard ROM read is active
+        STA $25         ; Set CV ($25) = Row
+        LDA #$00
+        STA $24         ; Set CH ($24) = 0
+        JSR VTAB        ; $FC22: Recalculate text line base address in BASL/BASH
+        PLA
         RTS
 
-RDBUF   ; READ BUFFER
+; -------------------------------------------------------------
+; PRSTR: Print NUL-terminated string
+; Input: A = Pointer LO, Y = Pointer HI
+; Uses scratch ZP: $02 (LO), $03 (HI)
+; Preserves: X
+; -------------------------------------------------------------
+PRSTR:  STA $02
+        STY $03
         LDY #$00
-        LDX SIZEH
-        BEQ RDREST
-RDFULL  JSR RDPAGE
-        INC ADDRH
-        DEX
-        BNE RDFULL
-RDREST  LDX SIZEL
-        BEQ RDDONE
-RDMORE  LDA DATA
-        STA (ADDRL),Y
+PRSTR_L LDA ($02),Y
+        BEQ PRSTR_D     ; $00 (NUL) -> done
+        JSR MON_COUT
         INY
-        DEX
-        BNE RDMORE
-RDDONE  RTS
-
-WRBUF   ; WRITE BUFFER
-        LDY #$00
-        LDX SIZEH
-        BEQ WRREST
-WRFULL  JSR WRPAGE
-        INC ADDRH
-        DEX
-        BNE WRFULL
-WRREST  LDX SIZEL
-        BEQ WRDONE
-WRMORE  LDA (ADDRL),Y
-        STA DATA
-        INY
-        DEX
-        BNE WRMORE
-WRDONE  RTS
-
-.IF 0
-RDBLOCK ; READ 512-BYTE BLOCK
-        LDY #$00
-        JSR RDPAGE
-        INC ADDRH
-.ENDIF
-RDPAGE  LDA DATA
-        STA (ADDRL),Y
-        INY
-        BNE RDPAGE
-        RTS
-
-WRBLOCK ; WRITE 512-BYTE BLOCK
-        LDY #$00
-        JSR WRPAGE
-        INC ADDRH
-WRPAGE  LDA (ADDRL),Y
-        STA DATA
-        INY
-        BNE WRPAGE
-        RTS
+        BNE PRSTR_L
+PRSTR_D RTS
 
 ;;;;;;;;;;;;;;;;
 ; BOOT HANDLER ;
 ;;;;;;;;;;;;;;;;
-BOOT1   LDA FNSTAT
+BOOT1   LDA MSLOT
+        ASL
+        ASL
+        ASL
+        ASL
+        STA $05         ; Save slot DEVSEL offset ($N0 = $10*SLOT) in scratch ZP $05
+        TAY
+        LDA FNSTAT,Y
         BMI FN_READY    ; Already connected -> proceed to boot immediately
+        AND #$40        ; Bit 6 = 1: Unconfigured / CONFIG requested
+        BNE GO_CFG      ; Jump directly to CONFIG utility
 
-        ; Soft switches to set text display
-        STA $C010       ; Clear keyboard strobe latch
-        STA $C051       ; TEXT mode ON
-        STA $C054       ; PAGE 1 ON
+        ; Text screen initialization via Monitor ROM
+        JSR MON_INIT
+        LDA #<MSG_WAIT
+        LDY #>MSG_WAIT
+        JSR PRSTR
 
-        ; Clear top screen line ($0400-$0427, 40 columns) with spaces ($A0)
-        LDA #' '+$80
-        LDX #39
-CLR1    STA $0400,X
-        DEX
-        BPL CLR1
+        ; Spinner index in scratch ZP $04
+        LDA #$00
+        STA $04
 
-        ; Write minimal status text directly to top screen line ($0400)
-        LDX #17
-PRMSG   LDA MSG_WAIT,X
-        STA $0400,X
-        DEX
-        BPL PRMSG
-
-        ; 500 iterations * ~120ms = ~60 seconds timeout
-        ; Input buffer RAM space ($0200, $0201)
-        LDA #<500
-        STA $0200       ; Timeout counter LO
-        LDA #>500
-        STA $0201       ; Timeout counter HI
+        ; Output initial spinner character
+        TAX
+        LDA SPINTBL,X
+        JSR MON_COUT    ; Cursor moves to next column
 
 W_LOOP:
-        ; 1. Check FujiNet connection status ($CFF2)
-        LDA FNSTAT
+        ; 1. Check FujiNet connection status ($Cn82)
+        LDY $05
+        LDA FNSTAT,Y
         BMI FN_READY    ; Connected! Proceed directly to boot
+        AND #$40
+        BNE GO_CFG      ; Unconfigured or CONFIG requested -> enter CONFIG
 
         ; 2. Check keyboard for manual abort ($C000)
         LDA KBD
@@ -393,7 +366,9 @@ W_LOOP:
         BEQ GO_CFG
         CMP #'c'+$80
         BEQ GO_CFG
-        JMP DONE        ; Any other key aborts to next slot scan / BASIC
+        CMP #$1B+$80    ; ESC key ($9B)
+        BEQ GO_CFG
+        JMP W_DELAY     ; Any other key continues waiting loop
 GO_CFG: JMP DOCFG
 
 W_DELAY:
@@ -405,24 +380,17 @@ DLY2    DEY
         DEX
         BNE DLY1
 
-        ; 4. Update spinner at $0413 (after "CONNECTING FUJINET ")
-        LDA $0200
+        ; 4. Update spinner using DEC $24 (CH) + MON_COUT
+        INC $04         ; Increment spinner index ($04)
+        DEC $24         ; Move horizontal cursor CH back 1 column (over spinner)
+        LDA $04
         AND #$03
         TAX
         LDA SPINTBL,X
-        STA $0413
+        JSR MON_COUT    ; Overwrite spinner character (COUT1 automatically increments CH)
 
-        ; 5. Decrement 16-bit timeout counter
-        LDA $0200
-        BNE DCR_LO
-        DEC $0201
-DCR_LO: DEC $0200
-        LDA $0200
-        ORA $0201
-        BNE W_LOOP
-
-        ; Timeout reached -> abort to next slot scan
-        JMP DONE
+        ; 5. Loop indefinitely until connected or manual CONFIG entered
+        JMP W_LOOP
 
 FN_READY:
         JMP DOBOOT
@@ -430,11 +398,12 @@ FN_READY:
 MSG_WAIT:
         .BYTE 'C'|$80, 'O'|$80, 'N'|$80, 'N'|$80, 'E'|$80, 'C'|$80, 'T'|$80, 'I'|$80
         .BYTE 'N'|$80, 'G'|$80, ' '|$80, 'F'|$80, 'U'|$80, 'J'|$80, 'I'|$80, 'N'|$80
-        .BYTE 'E'|$80, 'T'|$80
+        .BYTE 'E'|$80, 'T'|$80, ' '|$80, $00
 
 SPINTBL:
         .BYTE '/'|$80, '-'|$80, '\'|$80, '|'|$80
 DOCFG   JSR CFGHDLR
+        JMP BOOT1       ; Return to BOOT1 loop to wait for connection!
 
 DOBOOT  LDX #$01
         STX CMD
@@ -497,63 +466,7 @@ COLD    LDA #>(BASIC-1)
 
 ERRTEXT DFB 'R'|$80, 'O'|$80, 'R'|$80, 'R'|$80, 'E'|$80, ' '|$80, 'D'|$80, 'D'|$80, 'H'|$80
 
-;;;;;;;;;;;;;;;;;;
-; CONFIG HANDLER ;
-;;;;;;;;;;;;;;;;;;
-CFGHDLR STA $C051       ; TEXT
-        STA $C054       ; PAGE 1
-        LDA $FBB3
-        CMP #$38        ; APPLE ][
-        BEQ UPPER
-        CMP #$EA        ; APPLE ][+
-        BEQ UPPER
-        LDA $FBC0
-        CMP #$EA        ; APPLE //e
-        BEQ UPPER
-        LDA $C01E       ; CHARSET?
-        PHA
-        STA $C00F       ; ALT CHARSET
-        LDA $C01F       ; COLS?
-        PHA
-        STA $C00C       ; 40 COLS
-        LDA #$F2        ; LOWERCASE
-        PHP
-        BNE LOOP        ; ALWAYS
-UPPER   PHP
-        LDA #$F1        ; UPPERCASE
+.INCLUDE "CONFIG.S"
 
-LOOP    STA DATA
-        LDA #$40        ; CONFIG
-        JSR WRCMD
-        BNE SCRN        ; QUIT?
-
-        PLP
-        BEQ NOCHAR
-        PLA             ; COLS
-        BPL NOCOLS      ; 40 COLS?
-        STA $C00D       ; 80 COLS
-NOCOLS  PLA             ; CHARSET
-        BMI NOCHAR      ; ALT CHARSET?
-        STA $C00E       ; PRI CHARSET
-NOCHAR  JSR HOME
-        RTS
-
-SCRN    LDX #$00
-LINE    TXA
-        JSR BASCALC
-        LDY #$00
-CHAR    LDA DATA
-        STA (BASL),Y
-        INY
-        CPY #$28        ; COLS
-        BCC CHAR 
-        INX
-        CPX #$18        ; ROWS
-        BCC LINE
-
-        LDA KBD
-        BPL LOOP
-        STA KBDSTRB
-        BMI LOOP        ; ALWAYS
 
         .RES $CF00-*

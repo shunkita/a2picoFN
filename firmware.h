@@ -28,10 +28,9 @@ SOFTWARE.
 #define _FIRMWARE_H
 
 #define OFFSET_NORMAL 0x0000
-#define OFFSET_SERIAL 0x1000
-#define OFFSET_BANK_1 0x2000
-#define OFFSET_BANK_2 0x2800
-#define OFFSET_BANK_3 0x3000
+#define OFFSET_BANK_1 0x1000
+#define OFFSET_BANK_2 0x1800
+#define OFFSET_BANK_3 0x2000
 
 extern __attribute__((aligned(4))) uint8_t firmware[];
 

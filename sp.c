@@ -40,6 +40,7 @@ SOFTWARE.
 #include "gen.h"
 #include "slip.h"
 #include "transport.h"
+#include "config_ui.h"
 
 #include "sp.h"
 
@@ -200,6 +201,7 @@ static uint8_t sp_writeblk(uint8_t *params, const uint8_t *buffer) {
 void sp_task(void) {
 #if HOST == 0
   slip_task();
+  config_ui_task();
 
   switch (sp_control) {
 
@@ -207,10 +209,20 @@ void sp_task(void) {
   case CONTROL_DONE:
     return;
 
-  case CONTROL_CONFIG:
-    // Signal 6502 whether FujiNet is ready (1) or still connecting (0)
-    sp_buffer[0] = transport_is_connected() ? 1 : 0;
+  case CONTROL_CONFIG: {
+    uint8_t key = sp_buffer[0];
+    uint8_t ret = config_ui_process(key, (uint8_t *)&sp_buffer[1]);
+    sp_buffer[0] = ret;
+    if (ret == CONFIG_RET_QUIT) {
+      config_required = false;
+      sp_read_offset = sp_write_offset = 0;
+      __dmb();
+      sp_control = CONTROL_DONE; // Complete response to Apple II first to release the bus
+      transport_start_wifi();    // Start Wi-Fi connection afterwards
+      return;
+    }
     break;
+  }
 
   case CONTROL_PRODOS:
   case CONTROL_SP:

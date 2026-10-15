@@ -26,7 +26,9 @@ void transport_task(void);
  * - TCP: FujiNet-PC client has connected to port 1985.
  */
 extern volatile bool transport_connected;
+extern volatile bool config_required;
 bool transport_is_connected(void);
+bool transport_start_wifi(void);
 
 /*
  * Read a single byte from the transport stream.

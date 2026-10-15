@@ -27,6 +27,7 @@
 
 Hardware verification and testing have been performed using specific, fixed versions of FujiNet components (pinned versions rather than rolling latest builds):
 
+* **Host Machine:** Apple IIe enhanced
 * **FujiNet Firmware (`fujinet-pc`):** `v1.5.1+git-3d8`
 * **CONFIG Program:** `031e086*`
 
@@ -34,17 +35,10 @@ Hardware verification and testing have been performed using specific, fixed vers
 
 ## Configuration
 
-> [!NOTE]
-> **Provisional Configuration During Development**
-> Hardcoding Wi-Fi credentials and connection parameters in header files is a provisional configuration method during development. A persistent/interactive configuration mechanism will be introduced in future updates.
-
-Wi-Fi network credentials and FujiNet-PC settings are configured in `wifi_config.h`:
-
-```c
-#define WIFI_SSID       "your-ssid"
-#define WIFI_PASSWORD   "your-password"
-#define FUJINET_PC_PORT 1985
-```
+* **Initial Setup (Unconfigured):**
+  The interactive CONFIG screen is displayed on the Apple II upon boot. Configure your Wi-Fi SSID, password, and the IP address of the machine running FujiNet-PC. After saving, a2picoFN connects to your Wi-Fi network and establishes a link with FujiNet-PC, launching the FujiNet CONFIG program.
+* **Subsequent Boots (Configured):**
+  Directly enters the connection screen. Press the 'c' key at any time while waiting for connection to open the CONFIG screen and modify settings.
 
 ---
 

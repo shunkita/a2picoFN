@@ -63,7 +63,7 @@ static void __time_critical_func(reset)(bool asserted) {
             return;
         }
         active = false;
-        offset = serial ? OFFSET_SERIAL : OFFSET_NORMAL;
+        offset = OFFSET_NORMAL;
 
         ser_command = 0b00000000;
         ser_control = 0b00000000;
@@ -127,8 +127,19 @@ static void __time_critical_func(ser_control_get)(void) {
     a2pico_putdata(ser_control);
 }
 
+static void __time_critical_func(sp_status_get)(void) {
+    uint8_t status = 0;
+    if (transport_connected) {
+        status |= 0x80;
+    }
+    if (config_required) {
+        status |= 0x40;
+    }
+    a2pico_putdata(status);
+}
+
 static const void __not_in_flash("devsel_get") (*devsel_get[])(void) = {
-    nop_get,      ser_dipsw1_get, ser_dipsw2_get,  nop_get,
+    nop_get,      ser_dipsw1_get, sp_status_get,   nop_get,
     nop_get,      nop_get,        nop_get,         nop_get,
     ser_data_get, ser_status_get, ser_command_get, ser_control_get,
     nop_get,      nop_get,        nop_get,         nop_get
@@ -176,20 +187,15 @@ static void __time_critical_func(sp_control_get)(void) {
     a2pico_putdata(sp_control);
 }
 
-static void __time_critical_func(sp_status_get)(void) {
-    active = true;  // Ensure slot ROM remains active during wait polling
-    a2pico_putdata(transport_connected ? 0x80 : 0x00);
-}
-
 static void __time_critical_func(deactivate_get)(void) {
     active = false;
 }
 
 static const void __not_in_flash("cffx_get") (*cffx_get[])(void) = {
-    sp_data_get, sp_control_get, sp_status_get, nop_get,
-    nop_get,     nop_get,        nop_get,       nop_get,
-    nop_get,     nop_get,        nop_get,       nop_get,
-    nop_get,     nop_get,        nop_get,       deactivate_get
+    sp_data_get, sp_control_get, nop_get,         nop_get,
+    nop_get,     nop_get,        nop_get,         nop_get,
+    nop_get,     nop_get,        nop_get,         nop_get,
+    nop_get,     nop_get,        nop_get,         deactivate_get
 };
 
 static void __time_critical_func(sp_data_put)(uint32_t data) {
@@ -225,14 +231,14 @@ static void __time_critical_func(bank_clr_put)(uint32_t data) {
     if (!active) {
         return;
     }
-    offset = serial ? OFFSET_SERIAL : OFFSET_NORMAL;
+    offset = OFFSET_NORMAL;
 }
 
 static void __time_critical_func(bank_set_put)(uint32_t data) {
     if (!active) {
         return;
     }
-    offset = OFFSET_SERIAL + (data << 11);
+    offset = data << 11;
 }
 
 static void __time_critical_func(serial_false_put)(uint32_t data) {

@@ -13,6 +13,7 @@
 #include <lwip/ip_addr.h>
 
 #include "wifi_config.h"
+#include "flash_config.h"
 #include "transport.h"
 
 #define RX_BUF_SIZE 4096
@@ -25,6 +26,7 @@ typedef enum {
 } transport_state_t;
 
 volatile bool transport_connected = false;
+volatile bool config_required = false;
 static volatile transport_state_t state = STATE_DISCONNECTED;
 static struct tcp_pcb *server_pcb = NULL;
 static struct tcp_pcb *client_pcb = NULL;
@@ -212,7 +214,7 @@ void transport_init(void) {
     last_led_state = -1;
 
     // ----------------------------------------------------
-    // ステップ 1: cyw43_arch_init() の実行
+    // Step 1: Execute cyw43_arch_init()
     // ----------------------------------------------------
     int init_rc = cyw43_arch_init();
     if (init_rc != 0) {
@@ -222,50 +224,63 @@ void transport_init(void) {
 
     cyw43_arch_enable_sta_mode();
 
-    // 接続開始前にオンボード LED を点灯（「接続処理中」を示す）
+    // If not configured, skip normal Wi-Fi connection and enter CONFIG wait state (Bit 6)
+    if (!flash_config_is_valid()) {
+        config_required = true;
+        __dmb();
+        return;
+    }
+
+    // If configured, start normal connection
+    transport_start_wifi();
+}
+
+bool transport_start_wifi(void) {
+    config_required = false;
+    __dmb();
+
+    const char *target_ssid = WIFI_SSID;
+    const char *target_password = WIFI_PASSWORD;
+
+    if (flash_config_is_valid()) {
+        const wifi_config_block_t *cfg = flash_config_get();
+        target_ssid = cfg->ssid;
+        target_password = cfg->password;
+    }
+
+    // Turn on onboard LED before connection attempt (indicating connecting state)
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
     last_led_state = 1;
 
-    // ----------------------------------------------------
-    // ステップ 2: 同期接続関数による Wi-Fi 接続試行 (20秒タイムアウト)
-    // ----------------------------------------------------
+    // Attempt Wi-Fi connection using synchronous connect function (20s timeout)
     int rc = cyw43_arch_wifi_connect_timeout_ms(
-        WIFI_SSID,
-        WIFI_PASSWORD,
+        target_ssid,
+        target_password,
         CYW43_AUTH_WPA2_MIXED_PSK,
         20000
     );
 
     if (rc != 0) {
-        int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
-
-        if (rc == PICO_ERROR_TIMEOUT) {
-            // 2回点滅: タイムアウト（時間切れ）
-            show_error_blink_forever(2, 2000);
-        } else if (rc == PICO_ERROR_BADAUTH || link_status == CYW43_LINK_BADAUTH) {
-            // 3回点滅: 認証エラー（BADAUTH）
-            show_error_blink_forever(3, 2000);
-        } else if (link_status == CYW43_LINK_NONET) {
-            // 4回点滅: SSID 未検出（NONET）
-            show_error_blink_forever(4, 2000);
-        } else {
-            // その他: 高速点滅
-            show_fast_blink_forever();
-        }
-        return;
+        // On failure, do not re-set config_required; stay in disconnected state (transport_connected == false)
+        return false;
     }
 
-    // ----------------------------------------------------
-    // ステップ 3: Wi-Fi 接続成功 -> TCP サーバー (Listener) 起動
-    // ----------------------------------------------------
+    // Wi-Fi connection successful -> start TCP server (Listener)
     start_tcp_listener();
+    return true;
 }
 
 void transport_task(void) {
     cyw43_arch_poll();
     update_led();
 
-    // Wi-Fi リンク維持確認
+    // While CONFIG is running (config_required == true), suppress Wi-Fi reconnection,
+    // eliminating Core 0 blocking and freeing CYW43 exclusively for AP scanning
+    if (config_required) {
+        return;
+    }
+
+    // Check Wi-Fi link status
     if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_UP) {
         if (client_pcb) {
             tcp_abort(client_pcb);
@@ -273,12 +288,20 @@ void transport_task(void) {
         }
         state = STATE_DISCONNECTED;
 
-        // Wi-Fi 再接続試行
+        const char *target_ssid = WIFI_SSID;
+        const char *target_password = WIFI_PASSWORD;
+        if (flash_config_is_valid()) {
+            const wifi_config_block_t *cfg = flash_config_get();
+            target_ssid = cfg->ssid;
+            target_password = cfg->password;
+        }
+
+        // Attempt Wi-Fi reconnection
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         last_led_state = 1;
         int rc = cyw43_arch_wifi_connect_timeout_ms(
-            WIFI_SSID,
-            WIFI_PASSWORD,
+            target_ssid,
+            target_password,
             CYW43_AUTH_WPA2_MIXED_PSK,
             10000
         );

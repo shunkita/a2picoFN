@@ -4,11 +4,11 @@
 #include <pico/cyw43_arch.h>
 
 #ifndef WIFI_SSID
-#define WIFI_SSID "YOUR SSID"
+#define WIFI_SSID ""
 #endif
 
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "YOUR PASSWORD"
+#define WIFI_PASSWORD ""
 #endif
 
 #ifndef WIFI_AUTH_TYPE
@@ -17,7 +17,7 @@
 #endif
 
 #ifndef FUJINET_PC_IP
-#define FUJINET_PC_IP "YOUR IP ADDRESS"
+#define FUJINET_PC_IP ""
 #endif
 
 #ifndef FUJINET_PC_PORT

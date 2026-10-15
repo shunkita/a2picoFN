@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
 set(PROJECT_NAME a2picoFN)
-set(VERSION "2026-10-12" CACHE STRING "Firmware release date/version")
+set(VERSION "2026-10-15" CACHE STRING "Firmware release date/version")
 
 # Validate supported PICO_BOARD and set board suffix
 if(PICO_BOARD STREQUAL "a2pico2litew")
@@ -39,18 +39,19 @@ message("GIT_TAG is ${GIT_TAG}")
 target_compile_definitions(${TARGET_NAME} PRIVATE GIT_TAG="${GIT_TAG}")
 
 # Make sure TinyUSB can find tusb_config.h
-target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+)
 
 set_source_files_properties(incbin.S OBJECT_DEPENDS firmware.rom)
 add_custom_command(
         COMMAND cl65 -t apple2 -C apple2-asm.cfg
-                        ${CMAKE_CURRENT_SOURCE_DIR}/6502/SSC.S
+                        ${CMAKE_CURRENT_SOURCE_DIR}/6502/FIRMWARE.S
                      -o ${CMAKE_CURRENT_BINARY_DIR}/firmware.rom
-        MAIN_DEPENDENCY 6502/SSC.S
+        MAIN_DEPENDENCY 6502/FIRMWARE.S
         OUTPUT firmware.rom
-        DEPENDS 6502/SSC.CN00.S 6502/SSC.C800.S 6502/SSC.HILEV.S 6502/SSC.TERM.S
-                6502/SSC.CORE.S 6502/SSC.UTIL.S 6502/SSC.CMD.S   6502/SSC.CF00.S
-                6502/SMARTPORT.S
+        DEPENDS 6502/SSC.CN00.S 6502/SSC.CF00.S
+                6502/SMARTPORT.S 6502/CONNECT.S 6502/CONFIG.S
         VERBATIM
         )
 
@@ -62,6 +63,8 @@ target_sources(${TARGET_NAME} PRIVATE
         slip.c
         sp.c
         transport_wifi.c
+        flash_config.c
+        config_ui.c
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
@@ -69,6 +72,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
         pico_multicore
         pico_stdlib
         pico_unique_id
+        hardware_flash
         )
 
 pico_enable_stdio_usb(${TARGET_NAME} 0)

@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "board.h"
 #include "sp.h"
+#include "flash_config.h"
 
 #include "main.h"
 
@@ -60,6 +61,11 @@ void main(void) {
 
     busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
     multicore_launch_core1(board);
+
+    // Wait for Flash supply voltage and clock stabilization (cold boot safeguard)
+    sleep_ms(30);
+
+    flash_config_init();
 
     sp_init();
 #if HOST

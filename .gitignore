@@ -8,3 +8,4 @@ cmake-build*/
 # Local docs and references
 docs/
 refs/
+docs/dev-history-wifi-transition.md
