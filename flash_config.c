@@ -55,12 +55,7 @@ static bool validate_block(const wifi_config_block_t *block) {
         strnlen(block->ssid, sizeof(block->ssid)) > MAX_SSID_LEN) {
         return false;
     }
-    if (strnlen(block->password, sizeof(block->password)) == 0 ||
-        strnlen(block->password, sizeof(block->password)) > MAX_PASS_LEN) {
-        return false;
-    }
-    if (strnlen(block->host_ip, sizeof(block->host_ip)) == 0 ||
-        strnlen(block->host_ip, sizeof(block->host_ip)) > MAX_HOST_IP_LEN) {
+    if (strnlen(block->password, sizeof(block->password)) > MAX_PASS_LEN) {
         return false;
     }
 
@@ -94,18 +89,16 @@ const wifi_config_block_t* flash_config_get(void) {
     return &cached_config;
 }
 
-bool __no_inline_not_in_flash_func(flash_config_save)(const char *ssid, const char *pass, const char *host_ip) {
-    if (!ssid || !pass || !host_ip) {
+bool __no_inline_not_in_flash_func(flash_config_save)(const char *ssid, const char *pass) {
+    if (!ssid || !pass) {
         return false;
     }
 
     size_t ssid_len = strlen(ssid);
     size_t pass_len = strlen(pass);
-    size_t ip_len = strlen(host_ip);
 
     if (ssid_len == 0 || ssid_len > MAX_SSID_LEN ||
-        pass_len == 0 || pass_len > MAX_PASS_LEN ||
-        ip_len == 0 || ip_len > MAX_HOST_IP_LEN) {
+        pass_len > MAX_PASS_LEN) {
         return false;
     }
 
@@ -120,7 +113,6 @@ bool __no_inline_not_in_flash_func(flash_config_save)(const char *ssid, const ch
 
     strncpy(new_block.ssid, ssid, MAX_SSID_LEN);
     strncpy(new_block.password, pass, MAX_PASS_LEN);
-    strncpy(new_block.host_ip, host_ip, MAX_HOST_IP_LEN);
 
     new_block.crc32 = flash_config_calc_crc32(
         (const uint8_t *)&new_block,

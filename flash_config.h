@@ -54,7 +54,7 @@ bool flash_config_is_valid(void);
 const wifi_config_block_t* flash_config_get(void);
 
 // Update SRAM structure, recalculate CRC32, and save to Flash with Core 1 active
-bool flash_config_save(const char *ssid, const char *pass, const char *host_ip);
+bool flash_config_save(const char *ssid, const char *pass);
 
 // CRC32 calculation function (IEEE 802.3 polynomial 0xEDB88320)
 uint32_t flash_config_calc_crc32(const uint8_t *data, size_t len);

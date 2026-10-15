@@ -21,7 +21,6 @@ typedef enum {
     CFG_STATE_MANUAL_SSID,     // Manual SSID entry
     CFG_STATE_PASSWORD,        // Password entry (masked display, BS supported, [RETURN] confirm)
     CFG_STATE_TEST_CONNECT,    // Connection test in progress / display result
-    CFG_STATE_HOST_IP,         // FujiNet-PC Host IP entry
     CFG_STATE_READY_TO_SAVE,   // Ready to save ([RETURN] SAVE & BOOT, [ESC] CANCEL)
     CFG_STATE_EXIT,            // Exit flag
 } config_ui_state_t;

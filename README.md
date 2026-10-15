@@ -35,10 +35,22 @@ Hardware verification and testing have been performed using specific, fixed vers
 
 ## Configuration
 
+### FujiNet-PC Setup (`fnconfig.ini`)
+
+`a2picoFN` operates as a TCP server listening on port 1985. Configure `fujinet-pc` to connect to `a2picoFN` by adding or updating the following section in `fnconfig.ini`:
+
+```ini
+[BOIP]
+enabled=1
+host=<a2picoFN_IP_address>
+```
+
+### Apple II Wi-Fi Setup
+
 * **Initial Setup (Unconfigured):**
-  The interactive CONFIG screen is displayed on the Apple II upon boot. Configure your Wi-Fi SSID, password, and the IP address of the machine running FujiNet-PC. After saving, a2picoFN connects to your Wi-Fi network and establishes a link with FujiNet-PC, launching the FujiNet CONFIG program.
+  On first boot (or when credentials are not yet configured), the interactive CONFIG screen appears on the Apple II. Enter your Wi-Fi SSID and Password (press `TAB` to switch fields, and press `RETURN` to save). Settings are saved to on-board Flash.
 * **Subsequent Boots (Configured):**
-  Directly enters the connection screen. Press the 'c' key at any time while waiting for connection to open the CONFIG screen and modify settings.
+  Directly enters the connection screen and connects to the saved Wi-Fi network. Press the `C` key or `ESC` at any time while waiting for connection to open the CONFIG screen and modify settings.
 
 ---
 

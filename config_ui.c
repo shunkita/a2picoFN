@@ -21,7 +21,6 @@ static config_ui_state_t ui_state = CFG_STATE_SCAN_SELECT;
 
 static char current_ssid[MAX_SSID_LEN + 1] = "";
 static char current_password[MAX_PASS_LEN + 1] = "";
-static char current_host_ip[MAX_HOST_IP_LEN + 1] = "";
 
 static scan_ap_entry_t ap_list[MAX_SCAN_APS];
 static int ap_count = 0;
@@ -224,25 +223,6 @@ static void render_screen(void) {
     snprintf(pass_display, sizeof(pass_display), "%c[%-36s] ", pass_ind, pass_buf);
     draw_text(13, 0, pass_display);
 
-    // Row 15 - 16: FUJINET-PC HOST IP input field
-    draw_text(15, 0, "FUJINET-PC HOST IP:");
-    char ip_display[41];
-    char ip_buf[37];
-    size_t ip_len = strlen(current_host_ip);
-    for (size_t i = 0; i < sizeof(ip_buf) - 1; i++) {
-        if (i < ip_len) {
-            ip_buf[i] = current_host_ip[i];
-        } else if (i == ip_len && ui_state == CFG_STATE_HOST_IP) {
-            ip_buf[i] = '_';
-        } else {
-            ip_buf[i] = ' ';
-        }
-    }
-    ip_buf[sizeof(ip_buf) - 1] = '\0';
-    char ip_ind = (ui_state == CFG_STATE_HOST_IP) ? '*' : ' ';
-    snprintf(ip_display, sizeof(ip_display), "%c[%-36s] ", ip_ind, ip_buf);
-    draw_text(16, 0, ip_display);
-
     // Row 19 - 20: Footer operation line
     fill_row(19, '=');
     char save_line[41];
@@ -259,13 +239,10 @@ static void render_screen(void) {
             draw_text(22, 1, "TYPE SSID  [BS] DEL  [RETURN] CONFIRM");
             break;
         case CFG_STATE_PASSWORD:
-            draw_text(22, 1, "TYPE PASS  [BS] DEL  [RETURN] TEST");
+            draw_text(22, 1, "TYPE PASS  [BS] DEL  [RETURN] NEXT");
             break;
         case CFG_STATE_TEST_CONNECT:
             draw_text(22, 1, "TESTING... PLEASE WAIT");
-            break;
-        case CFG_STATE_HOST_IP:
-            draw_text(22, 1, "TYPE HOST IP  [BS] DEL  [RETURN] NEXT");
             break;
         case CFG_STATE_READY_TO_SAVE:
             draw_text(22, 1, "[RETURN] WRITE FLASH & BOOT  [ESC] QUIT");
@@ -286,15 +263,11 @@ void config_ui_init(void) {
         current_ssid[MAX_SSID_LEN] = '\0';
         strncpy(current_password, cfg->password, MAX_PASS_LEN);
         current_password[MAX_PASS_LEN] = '\0';
-        strncpy(current_host_ip, cfg->host_ip, MAX_HOST_IP_LEN);
-        current_host_ip[MAX_HOST_IP_LEN] = '\0';
     } else {
         strncpy(current_ssid, WIFI_SSID, MAX_SSID_LEN);
         current_ssid[MAX_SSID_LEN] = '\0';
         strncpy(current_password, WIFI_PASSWORD, MAX_PASS_LEN);
         current_password[MAX_PASS_LEN] = '\0';
-        strncpy(current_host_ip, FUJINET_PC_IP, MAX_HOST_IP_LEN);
-        current_host_ip[MAX_HOST_IP_LEN] = '\0';
     }
 
     ui_state = CFG_STATE_SCAN_SELECT;
@@ -485,10 +458,10 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
                     dirty = true;
                 }
             } else if (k == 0x09) { // TAB
-                ui_state = CFG_STATE_HOST_IP;
+                ui_state = CFG_STATE_READY_TO_SAVE;
                 dirty = true;
             } else if (k == 0x0D) { // RETURN
-                ui_state = CFG_STATE_HOST_IP;
+                ui_state = CFG_STATE_READY_TO_SAVE;
                 dirty = true;
             } else if (k == 0x1B) { // ESC
                 ui_state = CFG_STATE_SCAN_SELECT;
@@ -503,38 +476,12 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
             }
             break;
 
-        case CFG_STATE_HOST_IP:
-            if (k == 0x08 || k == 0x7F) { // BS
-                size_t len = strlen(current_host_ip);
-                if (len > 0) {
-                    current_host_ip[len - 1] = '\0';
-                    dirty = true;
-                }
-            } else if (k == 0x09) { // TAB
-                ui_state = CFG_STATE_READY_TO_SAVE;
-                dirty = true;
-            } else if (k == 0x0D) { // RETURN
-                ui_state = CFG_STATE_READY_TO_SAVE;
-                dirty = true;
-            } else if (k == 0x1B) { // ESC
-                ui_state = CFG_STATE_PASSWORD;
-                dirty = true;
-            } else if ((k >= '0' && k <= '9') || k == '.') {
-                size_t len = strlen(current_host_ip);
-                if (len < MAX_HOST_IP_LEN) {
-                    current_host_ip[len] = (char)k;
-                    current_host_ip[len + 1] = '\0';
-                    dirty = true;
-                }
-            }
-            break;
-
         case CFG_STATE_READY_TO_SAVE:
             if (k == 0x09) { // TAB -> Loop back to AP selection
                 ui_state = CFG_STATE_SCAN_SELECT;
                 dirty = true;
             } else if (k == 0x0D) { // RETURN -> Save to Flash & boot
-                flash_config_save(current_ssid, current_password, current_host_ip);
+                flash_config_save(current_ssid, current_password);
                 ui_state = CFG_STATE_EXIT;
                 ui_initialized = false;
                 full_redraw_needed = true;
