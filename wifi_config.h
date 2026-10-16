@@ -16,10 +16,6 @@
 #define WIFI_AUTH_TYPE CYW43_AUTH_WPA2_MIXED_PSK
 #endif
 
-#ifndef FUJINET_PC_IP
-#define FUJINET_PC_IP ""
-#endif
-
 #ifndef FUJINET_PC_PORT
 #define FUJINET_PC_PORT 1985
 #endif

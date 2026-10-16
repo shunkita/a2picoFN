@@ -29,32 +29,13 @@ SOFTWARE.
 #include <pico/multicore.h>
 #include <hardware/clocks.h>
 #include <hardware/structs/busctrl.h>
-#if HOST
-#include <tusb.h>
-#else
-#include "transport.h"
-#endif
 
 #include <a2pico.h>
 
 #include "board.h"
 #include "sp.h"
 #include "flash_config.h"
-
-#include "main.h"
-
-void io_task(void) {
-#if HOST
-        tuh_task();
-#else
-        transport_task();
-        // ser_task() is omitted: transport is dedicated to SLIP SmartPort bridge
-#endif
-}
-
-#if defined(PICO_CYW43_SUPPORTED) && PICO_CYW43_SUPPORTED
-#include <pico/cyw43_arch.h>
-#endif
+#include "transport.h"
 
 void main(void) {
     set_sys_clock_khz(200000, false);
@@ -68,14 +49,11 @@ void main(void) {
     flash_config_init();
 
     sp_init();
-#if HOST
-    tusb_init();
-#else
     transport_init();
-#endif
 
     while (true) {
         sp_task();
-        io_task();
+        transport_task();
     }
 }
+

@@ -35,24 +35,11 @@ SOFTWARE.
 
 #include "board.h"
 
-static const uint8_t __not_in_flash("ser_bits") ser_bits[] = {
-    0b11111111,
-    0b01111111,
-    0b00111111,
-    0b00011111};
-
-static volatile bool serial;
 static volatile bool active;
 
 static volatile uint32_t offset;
 
 static volatile uint32_t self;
-
-static volatile uint32_t ser_command;
-static volatile uint32_t ser_control;
-
-static volatile uint8_t ser_mask;
-static volatile uint8_t output_mask;
 
 static void __time_critical_func(reset)(bool asserted) {
     static absolute_time_t assert_time;
@@ -65,12 +52,6 @@ static void __time_critical_func(reset)(bool asserted) {
         active = false;
         offset = OFFSET_NORMAL;
 
-        ser_command = 0b00000000;
-        ser_control = 0b00000000;
-        ser_mask = ser_bits[0b00];
-
-        output_mask = 0b11111111;
-
         if (self) {
             firmware[self] = 0x3C;  // Identify as Disk II
         }
@@ -81,50 +62,13 @@ static void __time_critical_func(reset)(bool asserted) {
         assert_time = get_absolute_time();
     } else {
         if (absolute_time_diff_us(assert_time, get_absolute_time()) > 200000) {
-            serial = false;
             offset = OFFSET_NORMAL;
         }
         assert_time = nil_time;
     }
 }
 
-static void __time_critical_func(nop_get)(void) {
-}
-
-static void __time_critical_func(ser_dipsw1_get)(void) {
-                        // 0001     9600 baud
-                        //     00   <zero>
-                        //       01 printer mode
-    a2pico_putdata(0b11101110);
-}
-
-static void __time_critical_func(ser_dipsw2_get)(void) {
-                        // 1        1 stop bit
-                        //  0       <zero>
-                        //   0      no delay
-                        //    0     <zero>
-                        //     11   40 cols
-                        //       1  auto-lf
-                        //        0 cts line (not dipsw2)   
-    a2pico_putdata(0b01110000);
-}
-
-static void __time_critical_func(ser_data_get)(void) {
-    a2pico_putdata(sio_hw->fifo_rd & ser_mask);
-}
-
-static void __time_critical_func(ser_status_get)(void) {
-    // SIO_FIFO_ST_VLD_BITS _u(0x00000001)
-    // SIO_FIFO_ST_RDY_BITS _u(0x00000002)
-    a2pico_putdata((sio_hw->fifo_st & 3) << 3);
-}
-
-static void __time_critical_func(ser_command_get)(void) {
-    a2pico_putdata(ser_command);
-}
-
-static void __time_critical_func(ser_control_get)(void) {
-    a2pico_putdata(ser_control);
+static void __time_critical_func(dummy_get)(void) {
 }
 
 static void __time_critical_func(sp_status_get)(void) {
@@ -139,37 +83,20 @@ static void __time_critical_func(sp_status_get)(void) {
 }
 
 static const void __not_in_flash("devsel_get") (*devsel_get[])(void) = {
-    nop_get,      ser_dipsw1_get, sp_status_get,   nop_get,
-    nop_get,      nop_get,        nop_get,         nop_get,
-    ser_data_get, ser_status_get, ser_command_get, ser_control_get,
-    nop_get,      nop_get,        nop_get,         nop_get
+    dummy_get, dummy_get, sp_status_get, dummy_get,
+    dummy_get, dummy_get, dummy_get,     dummy_get,
+    dummy_get, dummy_get, dummy_get,     dummy_get,
+    dummy_get, dummy_get, dummy_get,     dummy_get
 };
 
-static void __time_critical_func(nop_put)(uint32_t data) {
-}
-
-static void __time_critical_func(ser_data_put)(uint32_t data) {
-    sio_hw->fifo_wr = data & ser_mask & output_mask;
-}
-
-static void __time_critical_func(ser_reset_put)(uint32_t data) {
-    ser_command &= 0b11100000;
-}
-
-static void __time_critical_func(ser_command_put)(uint32_t data) {
-    ser_command = data;
-}
-
-static void __time_critical_func(ser_control_put)(uint32_t data) {
-    ser_control = data;
-    ser_mask = ser_bits[(data >> 5) & 0b11];
+static void __time_critical_func(dummy_put)(uint32_t data) {
 }
 
 static const void __not_in_flash("devsel_put") (*devsel_put[])(uint32_t) = {
-    nop_put,      nop_put,       nop_put,         nop_put,
-    nop_put,      nop_put,       nop_put,         nop_put,
-    ser_data_put, ser_reset_put, ser_command_put, ser_control_put,
-    nop_put,      nop_put,       nop_put,         nop_put
+    dummy_put, dummy_put, dummy_put, dummy_put,
+    dummy_put, dummy_put, dummy_put, dummy_put,
+    dummy_put, dummy_put, dummy_put, dummy_put,
+    dummy_put, dummy_put, dummy_put, dummy_put
 };
 
 static void __time_critical_func(sp_data_get)(void) {
@@ -192,10 +119,10 @@ static void __time_critical_func(deactivate_get)(void) {
 }
 
 static const void __not_in_flash("cffx_get") (*cffx_get[])(void) = {
-    sp_data_get, sp_control_get, nop_get,         nop_get,
-    nop_get,     nop_get,        nop_get,         nop_get,
-    nop_get,     nop_get,        nop_get,         nop_get,
-    nop_get,     nop_get,        nop_get,         deactivate_get
+    sp_data_get, sp_control_get, dummy_get,   dummy_get,
+    dummy_get,   dummy_get,      dummy_get,   dummy_get,
+    dummy_get,   dummy_get,      dummy_get,   dummy_get,
+    dummy_get,   dummy_get,      dummy_get,   deactivate_get
 };
 
 static void __time_critical_func(sp_data_put)(uint32_t data) {
@@ -213,20 +140,6 @@ static void __time_critical_func(sp_control_put)(uint32_t data) {
     sp_control = data;
 }
 
-static void __time_critical_func(basic_enter_put)(uint32_t data) {
-    if (!active) {
-        return;
-    }
-    output_mask = 0b01111111;
-}
-
-static void __time_critical_func(basic_leave_put)(uint32_t data) {
-    if (!active) {
-        return;
-    }
-    output_mask = 0b11111111;
-}
-
 static void __time_critical_func(bank_clr_put)(uint32_t data) {
     if (!active) {
         return;
@@ -241,32 +154,15 @@ static void __time_critical_func(bank_set_put)(uint32_t data) {
     offset = data << 11;
 }
 
-static void __time_critical_func(serial_false_put)(uint32_t data) {
-    if (!active) {
-        return;
-    }
-    serial = false;
-    offset = OFFSET_NORMAL;
-}
-
-static void __time_critical_func(serial_true_put)(uint32_t data) {
-    if (!active) {
-        return;
-    }
-    // SSC mode is disabled in a2picoFN: always keep normal SmartPort mode
-    serial = false;
-    offset = OFFSET_NORMAL;
-}
-
 static void __time_critical_func(deactivate_put)(uint32_t data) {
     active = false;
 }
 
 static const void __not_in_flash("cffx_put") (*cffx_put[])(uint32_t) = {
-    sp_data_put,  sp_control_put,   nop_put,         nop_put,
-    nop_put,      nop_put,          nop_put,         nop_put,
-    nop_put,      basic_enter_put,  basic_leave_put, bank_clr_put,
-    bank_set_put, serial_false_put, serial_true_put, deactivate_put
+    sp_data_put,  sp_control_put, dummy_put,    dummy_put,
+    dummy_put,    dummy_put,      dummy_put,    dummy_put,
+    dummy_put,    dummy_put,      dummy_put,    bank_clr_put,
+    bank_set_put, dummy_put,      dummy_put,    deactivate_put
 };
 
 void __time_critical_func(board)(void) {
