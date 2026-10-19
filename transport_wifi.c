@@ -27,6 +27,8 @@ typedef enum {
 
 volatile bool transport_connected = false;
 volatile bool config_required = false;
+char net_ip_address_str[16] = "";
+volatile bool net_ip_ready = false;
 static volatile transport_state_t state = STATE_DISCONNECTED;
 static struct tcp_pcb *server_pcb = NULL;
 static struct tcp_pcb *client_pcb = NULL;
@@ -210,6 +212,8 @@ void transport_init(void) {
     server_pcb = NULL;
     client_pcb = NULL;
     transport_connected = false;
+    net_ip_ready = false;
+    net_ip_address_str[0] = '\0';
     __dmb();
     last_led_state = -1;
 
@@ -265,7 +269,10 @@ bool transport_start_wifi(void) {
         return false;
     }
 
-    // Wi-Fi connection successful -> start TCP server (Listener)
+    // Wi-Fi connection successful -> store IP address and start TCP server (Listener)
+    ip4addr_ntoa_r(netif_ip4_addr(&cyw43_state.netif[CYW43_ITF_STA]), net_ip_address_str, sizeof(net_ip_address_str));
+    __dmb();
+    net_ip_ready = true;
     start_tcp_listener();
     return true;
 }
@@ -287,6 +294,9 @@ void transport_task(void) {
             client_pcb = NULL;
         }
         state = STATE_DISCONNECTED;
+        net_ip_ready = false;
+        net_ip_address_str[0] = '\0';
+        __dmb();
 
         const char *target_ssid = WIFI_SSID;
         const char *target_password = WIFI_PASSWORD;
@@ -306,6 +316,9 @@ void transport_task(void) {
             10000
         );
         if (rc == 0) {
+            ip4addr_ntoa_r(netif_ip4_addr(&cyw43_state.netif[CYW43_ITF_STA]), net_ip_address_str, sizeof(net_ip_address_str));
+            __dmb();
+            net_ip_ready = true;
             if (!server_pcb) {
                 start_tcp_listener();
             } else {

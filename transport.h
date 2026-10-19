@@ -27,6 +27,8 @@ void transport_task(void);
  */
 extern volatile bool transport_connected;
 extern volatile bool config_required;
+extern char net_ip_address_str[16];
+extern volatile bool net_ip_ready;
 bool transport_is_connected(void);
 bool transport_start_wifi(void);
 

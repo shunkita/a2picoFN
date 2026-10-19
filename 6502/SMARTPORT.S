@@ -331,7 +331,9 @@ BOOT1   LDA MSLOT
         STA $05         ; Save slot DEVSEL offset ($N0 = $10*SLOT) in scratch ZP $05
         TAY
         LDA FNSTAT,Y
-        BMI FN_READY    ; Already connected -> proceed to boot immediately
+        BPL NOT_CONN
+        JMP FN_READY    ; Already connected -> proceed to boot immediately
+NOT_CONN:
         AND #$40        ; Bit 6 = 1: Unconfigured / CONFIG requested
         BNE GO_CFG      ; Jump directly to CONFIG utility
 
@@ -341,11 +343,12 @@ BOOT1   LDA MSLOT
         LDY #>MSG_WAIT
         JSR PRSTR
 
-        ; Spinner index in scratch ZP $04
+        ; Spinner index in scratch ZP $04, IP display flag in ZP $06
         LDA #$00
         STA $04
+        STA $06
 
-        ; Output initial spinner character
+        ; Output initial spinner character at Row 0, Col 11
         TAX
         LDA SPINTBL,X
         JSR MON_COUT    ; Cursor moves to next column
@@ -354,11 +357,26 @@ W_LOOP:
         ; 1. Check FujiNet connection status ($Cn82)
         LDY $05
         LDA FNSTAT,Y
-        BMI FN_READY    ; Connected! Proceed directly to boot
+        BPL NOT_READY
+        JMP FN_READY    ; Connected! Proceed directly to boot
+NOT_READY:
         AND #$40
         BNE GO_CFG      ; Unconfigured or CONFIG requested -> enter CONFIG
 
-        ; 2. Check keyboard for manual abort ($C000)
+        ; 2. Check if IP address is available and not yet displayed
+        LDA $06
+        BNE W_KBD       ; Already displayed -> skip IP check
+
+        LDY $05
+        LDA FNSTAT,Y
+        AND #$20        ; Bit 5 = IP Ready
+        BEQ W_KBD       ; Not ready yet -> check keyboard
+
+        ; IP is ready! Display IP on Row 1 (Line 2)
+        JSR SHOW_IP
+
+W_KBD:
+        ; 3. Check keyboard for manual abort ($C000)
         LDA KBD
         BPL W_DELAY     ; Bit 7 = 0 -> no key pressed
         STA KBDSTRB     ; Clear strobe
@@ -372,7 +390,7 @@ W_LOOP:
 GO_CFG: JMP DOCFG
 
 W_DELAY:
-        ; 3. Delay ~120ms using only X and Y registers
+        ; 4. Delay ~120ms using only X and Y registers
         LDX #95
 DLY1    LDY #$00
 DLY2    DEY
@@ -380,25 +398,81 @@ DLY2    DEY
         DEX
         BNE DLY1
 
-        ; 4. Update spinner using DEC $24 (CH) + MON_COUT
+        ; 5. Update spinner at Row 0, Col 11
         INC $04         ; Increment spinner index ($04)
-        DEC $24         ; Move horizontal cursor CH back 1 column (over spinner)
+        LDA #$00
+        STA $25         ; Set CV = 0 (Row 0)
+        LDA #11
+        STA $24         ; Set CH = 11 (Spinner position)
+        JSR VTAB
         LDA $04
         AND #$03
         TAX
         LDA SPINTBL,X
-        JSR MON_COUT    ; Overwrite spinner character (COUT1 automatically increments CH)
+        JSR MON_COUT    ; Overwrite spinner character
 
-        ; 5. Loop indefinitely until connected or manual CONFIG entered
+        ; 6. Loop indefinitely until connected or manual CONFIG entered
         JMP W_LOOP
 
+SHOW_IP:
+        ; Move cursor to Row 1 (Line 2), Column 0
+        LDA #$01
+        JSR MON_VTAB
+
+        ; Print "IP: " label
+        LDA #<MSG_IP
+        LDY #>MSG_IP
+        JSR PRSTR
+
+        ; Read and print IP address string from FNIP ($C083,Y)
+RD_IPL: LDY $05
+        LDA FNIP,Y      ; Read char from FNIP ($C083,Y)
+        BEQ IP_DONE     ; $00 (NULL terminator) -> done
+        ORA #$80        ; Convert ASCII to Apple II normal text code
+        JSR MON_COUT    ; Output character via Monitor ROM
+        JMP RD_IPL
+
+IP_DONE:
+        LDA #$01
+        STA $06         ; Set IP displayed flag
+
+        ; Restore cursor to spinner position (Row 0, Col 11)
+        LDA #$00
+        STA $25
+        LDA #11
+        STA $24
+        JSR VTAB
+        RTS
+
 FN_READY:
+        LDA $06         ; Was IP displayed during wait?
+        BNE GO_BOOT     ; Yes -> proceed to boot immediately
+        LDY $05
+        LDA FNSTAT,Y
+        AND #$20        ; Is IP ready?
+        BEQ GO_BOOT     ; No -> proceed to boot
+        JSR SHOW_IP     ; Display IP before booting
+        ; Brief delay (~1.2s) so user can see the IP
+        LDA #10
+        STA $04
+FN_DLY: LDX #95
+FND1:   LDY #$00
+FND2:   DEY
+        BNE FND2
+        DEX
+        BNE FND1
+        DEC $04
+        BNE FN_DLY
+
+GO_BOOT:
         JMP DOBOOT
 
 MSG_WAIT:
         .BYTE 'C'|$80, 'O'|$80, 'N'|$80, 'N'|$80, 'E'|$80, 'C'|$80, 'T'|$80, 'I'|$80
-        .BYTE 'N'|$80, 'G'|$80, ' '|$80, 'F'|$80, 'U'|$80, 'J'|$80, 'I'|$80, 'N'|$80
-        .BYTE 'E'|$80, 'T'|$80, ' '|$80, $00
+        .BYTE 'N'|$80, 'G'|$80, ' '|$80, $00
+
+MSG_IP:
+        .BYTE 'I'|$80, 'P'|$80, ':'|$80, ' '|$80, $00
 
 SPINTBL:
         .BYTE '/'|$80, '-'|$80, '\'|$80, '|'|$80

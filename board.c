@@ -40,6 +40,7 @@ static volatile bool active;
 static volatile uint32_t offset;
 
 static volatile uint32_t self;
+static volatile uint8_t ip_read_idx;
 
 static void __time_critical_func(reset)(bool asserted) {
     static absolute_time_t assert_time;
@@ -58,6 +59,7 @@ static void __time_critical_func(reset)(bool asserted) {
 
         multicore_fifo_drain();
         sp_reset();
+        ip_read_idx = 0;
 
         assert_time = get_absolute_time();
     } else {
@@ -79,11 +81,27 @@ static void __time_critical_func(sp_status_get)(void) {
     if (config_required) {
         status |= 0x40;
     }
+    if (net_ip_ready) {
+        status |= 0x20;
+    }
     a2pico_putdata(status);
 }
 
+static void __time_critical_func(sp_ip_char_get)(void) {
+    uint8_t ch = 0;
+    if (net_ip_ready && ip_read_idx < sizeof(net_ip_address_str)) {
+        ch = (uint8_t)net_ip_address_str[ip_read_idx];
+        if (ch != 0) {
+            ip_read_idx++;
+        } else {
+            ip_read_idx = 0;
+        }
+    }
+    a2pico_putdata(ch);
+}
+
 static const void __not_in_flash("devsel_get") (*devsel_get[])(void) = {
-    dummy_get, dummy_get, sp_status_get, dummy_get,
+    dummy_get, dummy_get, sp_status_get, sp_ip_char_get,
     dummy_get, dummy_get, dummy_get,     dummy_get,
     dummy_get, dummy_get, dummy_get,     dummy_get,
     dummy_get, dummy_get, dummy_get,     dummy_get
