@@ -6,11 +6,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <pico/stdlib.h>
-#include <pico/cyw43_arch.h>
 
-#include "wifi_config.h"
-#include "flash_config.h"
+#include "fn_config.h"
+#include "net_mgr.h"
 #include "config_ui.h"
 
 static uint8_t screen_buf[SCREEN_SIZE];
@@ -28,6 +26,9 @@ static int selected_ap_idx = 0;
 static int ap_scroll_offset = 0;
 static bool scan_active = false;
 static bool dirty = true;
+
+static net_mgr_state_t last_net_state = NET_MGR_STATE_DISCONNECTED;
+static char last_ip_str[16] = "";
 
 #define AP_DISPLAY_ROWS 5
 
@@ -64,44 +65,50 @@ static void clear_screen(void) {
 }
 
 // -------------------------------------------------------------
-// Wi-Fi AP scan callback & control
+// Wi-Fi AP scan control via net_mgr
 // -------------------------------------------------------------
 
-static int scan_result_callback(void *env, const cyw43_ev_scan_result_t *result) {
-    if (!result || result->ssid_len == 0) {
-        return 0;
+static void sync_scanned_aps(void) {
+    int count = net_mgr_wifi_get_scanned_aps_count();
+    if (count > MAX_SCAN_APS) {
+        count = MAX_SCAN_APS;
+    }
+    if (count < 0) {
+        count = 0;
     }
 
-    // Duplicate check
-    char name[33];
-    size_t len = result->ssid_len < 32 ? result->ssid_len : 32;
-    memcpy(name, result->ssid, len);
-    name[len] = '\0';
-
-    for (int i = 0; i < ap_count; i++) {
-        if (strcmp(ap_list[i].ssid, name) == 0) {
-            if (result->rssi > ap_list[i].rssi) {
-                ap_list[i].rssi = result->rssi;
-                dirty = true;
+    bool changed = (count != ap_count);
+    for (int i = 0; i < count; i++) {
+        net_wifi_ap_t ap;
+        if (net_mgr_wifi_get_scanned_ap(i, &ap)) {
+            if (i >= ap_count ||
+                strcmp(ap_list[i].ssid, ap.ssid) != 0 ||
+                ap_list[i].rssi != ap.rssi ||
+                ap_list[i].auth_mode != ap.auth_mode) {
+                changed = true;
             }
-            return 0;
+            strncpy(ap_list[i].ssid, ap.ssid, MAX_SSID_LEN);
+            ap_list[i].ssid[MAX_SSID_LEN] = '\0';
+            ap_list[i].rssi = ap.rssi;
+            ap_list[i].auth_mode = ap.auth_mode;
         }
     }
 
-    if (ap_count < MAX_SCAN_APS) {
-        strncpy(ap_list[ap_count].ssid, name, 32);
-        ap_list[ap_count].ssid[32] = '\0';
-        ap_list[ap_count].rssi = result->rssi;
-        ap_list[ap_count].auth_mode = result->auth_mode;
-        ap_count++;
+    ap_count = count;
+    if (selected_ap_idx >= ap_count && ap_count > 0) {
+        selected_ap_idx = ap_count - 1;
+    }
+    if (changed) {
         dirty = true;
     }
-
-    return 0;
 }
 
 void config_ui_start_scan(void) {
-    if (cyw43_wifi_scan_active(&cyw43_state)) {
+    if (!net_mgr_supports_wifi()) {
+        scan_active = false;
+        return;
+    }
+    if (net_mgr_wifi_is_scanning()) {
         return;
     }
     ap_count = 0;
@@ -110,18 +117,32 @@ void config_ui_start_scan(void) {
     scan_active = true;
     dirty = true;
 
-    cyw43_wifi_scan_options_t scan_options = {0};
-    int rc = cyw43_wifi_scan(&cyw43_state, &scan_options, NULL, scan_result_callback);
-    if (rc != 0) {
+    if (!net_mgr_wifi_start_scan()) {
         scan_active = false;
         dirty = true;
     }
 }
 
 void config_ui_task(void) {
-    if (scan_active && !cyw43_wifi_scan_active(&cyw43_state)) {
-        scan_active = false;
-        dirty = true;
+    if (!net_mgr_supports_wifi()) {
+        net_mgr_state_t st = net_mgr_get_state();
+        char ip[16] = "";
+        net_mgr_get_ip_str(ip, sizeof(ip));
+        if (st != last_net_state || strcmp(ip, last_ip_str) != 0) {
+            last_net_state = st;
+            strncpy(last_ip_str, ip, sizeof(last_ip_str) - 1);
+            last_ip_str[sizeof(last_ip_str) - 1] = '\0';
+            dirty = true;
+        }
+        return;
+    }
+    if (scan_active) {
+        sync_scanned_aps();
+        if (!net_mgr_wifi_is_scanning()) {
+            sync_scanned_aps();
+            scan_active = false;
+            dirty = true;
+        }
     }
 }
 
@@ -133,11 +154,80 @@ const uint8_t* config_ui_get_screen_buffer(void) {
     return screen_buf;
 }
 
+const char *config_ui_get_saved_ssid(void) {
+    return current_ssid;
+}
+
+const char *config_ui_get_saved_password(void) {
+    return current_password;
+}
+
 // -------------------------------------------------------------
 // Screen layout rendering engine
 // -------------------------------------------------------------
 
+static void render_non_wifi_status_screen(void) {
+    clear_screen();
+
+    net_transport_t tr = net_mgr_get_transport();
+    net_mgr_state_t st = net_mgr_get_state();
+    char ip[16] = "";
+    bool has_ip = net_mgr_get_ip_str(ip, sizeof(ip));
+
+    fill_row(0, '=');
+    if (tr == NET_TRANSPORT_USB_ECM) {
+        draw_text(1, 0, "      a2picoFN CDC-ECM VIRTUAL ETH      ");
+    } else {
+        draw_text(1, 0, "        a2picoFN ETHERNET STATUS        ");
+    }
+    fill_row(2, '=');
+
+    const char *st_str = "WAITING FOR LINK";
+    if (st == NET_MGR_STATE_CONNECTED) {
+        st_str = "CONNECTED (TCP 1985)";
+    } else if (st == NET_MGR_STATE_CONNECTING) {
+        st_str = "CONNECTING / DHCP...";
+    }
+    char line[41];
+    snprintf(line, sizeof(line), "STATUS:     %-26s", st_str);
+    draw_text(4, 1, line);
+
+    if (tr == NET_TRANSPORT_USB_ECM) {
+        draw_text(6, 1, "LINK SPEED: 12 Mbps (USB FULL SPEED)");
+    } else {
+        draw_text(6, 1, "LINK SPEED: 10/100 Mbps (W5500 SPI)");
+    }
+
+    if (has_ip) {
+        if (tr == NET_TRANSPORT_USB_ECM) {
+            snprintf(line, sizeof(line), "IP ADDR:    %s (FIXED)", ip);
+        } else {
+            snprintf(line, sizeof(line), "IP ADDR:    %s", ip);
+        }
+    } else {
+        snprintf(line, sizeof(line), "IP ADDR:    (NONE)");
+    }
+    draw_text(8, 1, line);
+
+    if (tr == NET_TRANSPORT_USB_ECM) {
+        draw_text(11, 1, "NO CONFIGURATION REQUIRED.");
+        draw_text(12, 1, "CONNECT USB TO PC/MAC & START FUJINET.");
+    } else {
+        draw_text(11, 1, "NO CONFIGURATION REQUIRED.");
+        draw_text(12, 1, "CONNECT LAN CABLE FOR AUTO DHCP.");
+    }
+
+    fill_row(19, '=');
+    draw_text(20, 1, "[RETURN] BOOT             [ESC] EXIT");
+    draw_text(22, 1, "PRESS [RETURN] OR [ESC] TO CONTINUE");
+}
+
 static void render_screen(void) {
+    if (!net_mgr_supports_wifi()) {
+        render_non_wifi_status_screen();
+        return;
+    }
+
     clear_screen();
 
     // Row 0 - 2: Header
@@ -257,18 +347,27 @@ static void render_screen(void) {
 // -------------------------------------------------------------
 
 void config_ui_init(void) {
-    if (flash_config_is_valid()) {
-        const wifi_config_block_t *cfg = flash_config_get();
-        strncpy(current_ssid, cfg->ssid, MAX_SSID_LEN);
-        current_ssid[MAX_SSID_LEN] = '\0';
-        strncpy(current_password, cfg->password, MAX_PASS_LEN);
-        current_password[MAX_PASS_LEN] = '\0';
-    } else {
+    if (!net_mgr_supports_wifi()) {
+        ui_state = CFG_STATE_SCAN_SELECT;
+        full_redraw_needed = true;
+        memset(displayed_screen, 0, sizeof(displayed_screen));
+        last_net_state = net_mgr_get_state();
+        last_ip_str[0] = '\0';
+        net_mgr_get_ip_str(last_ip_str, sizeof(last_ip_str));
+        render_screen();
+        return;
+    }
+
+    net_mgr_wifi_set_config_active(true);
+
+    current_ssid[0] = '\0';
+    net_mgr_wifi_get_ssid(current_ssid, sizeof(current_ssid));
+    if (current_ssid[0] == '\0') {
         strncpy(current_ssid, WIFI_SSID, MAX_SSID_LEN);
         current_ssid[MAX_SSID_LEN] = '\0';
-        strncpy(current_password, WIFI_PASSWORD, MAX_PASS_LEN);
-        current_password[MAX_PASS_LEN] = '\0';
     }
+    strncpy(current_password, WIFI_PASSWORD, MAX_PASS_LEN);
+    current_password[MAX_PASS_LEN] = '\0';
 
     ui_state = CFG_STATE_SCAN_SELECT;
     ap_count = 0;
@@ -277,10 +376,7 @@ void config_ui_init(void) {
     full_redraw_needed = true;
     memset(displayed_screen, 0, sizeof(displayed_screen));
 
-    // Initialize CYW43 & start AP scan
-    cyw43_arch_enable_sta_mode();
     config_ui_start_scan();
-
     render_screen();
 }
 
@@ -373,6 +469,19 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
     // 2. Valid key input (Bit 7 = 1)
     uint8_t k = key & 0x7F; // Normalize to ASCII
 
+    if (!net_mgr_supports_wifi()) {
+        if (k == 0x0D || k == 0x1B) { // RETURN or ESC
+            ui_state = CFG_STATE_EXIT;
+            ui_initialized = false;
+            full_redraw_needed = true;
+            return CONFIG_RET_QUIT;
+        }
+        if (dirty) {
+            return build_screen_update_packet(screen_buffer_960);
+        }
+        return CONFIG_RET_SKIP;
+    }
+
     switch (ui_state) {
         case CFG_STATE_SCAN_SELECT:
             if (k == 0x0B || k == 'A' || k == 'a' || k == 'U' || k == 'u') { // UP
@@ -417,6 +526,7 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
                 ui_state = CFG_STATE_EXIT;
                 ui_initialized = false;
                 full_redraw_needed = true;
+                net_mgr_wifi_set_config_active(false);
                 return CONFIG_RET_QUIT; // Exit (0)
             }
             break;
@@ -481,15 +591,17 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
                 ui_state = CFG_STATE_SCAN_SELECT;
                 dirty = true;
             } else if (k == 0x0D) { // RETURN -> Save to Flash & boot
-                flash_config_save(current_ssid, current_password);
+                net_mgr_wifi_save_credentials(current_ssid, current_password);
                 ui_state = CFG_STATE_EXIT;
                 ui_initialized = false;
                 full_redraw_needed = true;
+                net_mgr_wifi_set_config_active(false);
                 return CONFIG_RET_QUIT; // Exit (0)
             } else if (k == 0x1B) { // ESC -> Exit without saving
                 ui_state = CFG_STATE_EXIT;
                 ui_initialized = false;
                 full_redraw_needed = true;
+                net_mgr_wifi_set_config_active(false);
                 return CONFIG_RET_QUIT; // Exit (0)
             }
             break;
@@ -498,6 +610,7 @@ uint8_t config_ui_process(uint8_t key, uint8_t *screen_buffer_960) {
         default:
             ui_initialized = false;
             full_redraw_needed = true;
+            net_mgr_wifi_set_config_active(false);
             return CONFIG_RET_QUIT; // Exit (0)
     }
 

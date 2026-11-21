@@ -14,6 +14,9 @@
 #define SCREEN_ROWS 24
 #define SCREEN_SIZE (SCREEN_COLS * SCREEN_ROWS) // 960 bytes
 
+#define MAX_SSID_LEN 32
+#define MAX_PASS_LEN 63
+
 #define MAX_SCAN_APS 10
 
 typedef enum {
@@ -59,6 +62,10 @@ void config_ui_task(void);
 
 // Get current UI state
 config_ui_state_t config_ui_get_state(void);
+
+// Get current confirmed credentials from memory
+const char *config_ui_get_saved_ssid(void);
+const char *config_ui_get_saved_password(void);
 
 #ifdef __cplusplus
 }

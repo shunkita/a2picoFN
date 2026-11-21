@@ -34,19 +34,13 @@ SOFTWARE.
 
 #include "board.h"
 #include "sp.h"
-#include "flash_config.h"
 #include "transport.h"
 
 void main(void) {
-    set_sys_clock_khz(200000, false);
-
-    busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
-    multicore_launch_core1(board);
+    a2pico_init(board);
 
     // Wait for Flash supply voltage and clock stabilization (cold boot safeguard)
     sleep_ms(30);
-
-    flash_config_init();
 
     sp_init();
     transport_init();
