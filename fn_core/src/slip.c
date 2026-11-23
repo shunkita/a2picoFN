@@ -208,7 +208,7 @@ static void recv_response(uint8_t *buffer) {
                 buffer[SP_O_RETVAL] = SP_BUSERR;
                 return;
             case REQ_DONE:
-                if (skip) {
+                if (command == SP_CMD_STATUS && i >= SP_O_STS_CNT) {
                     buffer[SP_O_STS_CNT + 0] = (i - SP_O_STS_CNT) % 0x0100;
                     buffer[SP_O_STS_CNT + 1] = (i - SP_O_STS_CNT) / 0x0100;
                 }
